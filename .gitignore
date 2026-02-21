@@ -1,0 +1,22 @@
+# Abaqus temporary files
+*.lck
+*.log
+*.msg
+*.sta
+*.dat
+*.res
+*.mdl
+*.prt
+*.asm
+*.sim
+*.std
+*.abr
+*.cae~
+*.rec
+*.rpy
+*.jnl
+*.odb
+
+# OS files
+.DS_Store
+Thumbs.db
