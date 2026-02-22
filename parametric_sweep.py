@@ -26,6 +26,7 @@ import mesh
 import job
 import sketch
 import regionToolset
+import mdb
 
 # ============================================================
 # SWEEP PARAMETERS
@@ -390,11 +391,11 @@ def runSweep():
                     # Extract results
                     odbPath = os.path.join(os.path.dirname(__file__), f'{jobName}.odb')
                     results = extractResults(odbPath, beta, theta)
-                    
+
                     configKey = f"b{betaStr}_t{thetaStr}"
                     allResults[configKey] = results
                     print(f"  Results extracted successfully")
-                    
+
                     if results['maxStress']:
                         print(f"  Max Stress: {results['maxStress']/1e3:.2f} MPa")
                     if results['bucklingLoadFactors']:
@@ -403,7 +404,7 @@ def runSweep():
                         print(f"  First Natural Freq: {results['naturalFrequencies'][0]:.2f} Hz")
                 else:
                     print(f"  Job did not complete successfully")
-                    
+
             except Exception as e:
                 print(f"  ERROR: {str(e)}")
                 configKey = f"b{betaStr}_t{thetaStr}"
@@ -412,6 +413,18 @@ def runSweep():
                     'theta': theta,
                     'error': str(e)
                 }
+            finally:
+                # Clean up: close ODB and delete model to save memory
+                try:
+                    import visualization
+                    visualization.closeOdb()
+                except:
+                    pass
+                # Delete model from memory if not needed
+                try:
+                    del mdb.models[modelName]
+                except:
+                    pass
     
     # Save all results to JSON
     # Convert tuples to lists for JSON serialization

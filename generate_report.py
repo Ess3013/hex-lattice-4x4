@@ -47,63 +47,72 @@ def loadResults(resultsFile=None):
 # ============================================================
 def generateResultsTable(results):
     """Generate a formatted results table"""
-    
+
     table = []
     headers = [
-        'Config', 'β', 'θ (°)', 
-        'σ_max (MPa)', 'SF', 'Plastic?', 
+        'Config', 'β', 'θ (°)',
+        'σ_max (MPa)', 'SF', 'Plastic?',
         'P_cr (kN)', 'LF', 'Buckle?',
         'f₁ (Hz)', '#BG', 'BG₁ Onset (Hz)', 'BG₁ Width (Hz)'
     ]
-    
+
     for configKey, data in sorted(results.items()):
         row = {'Config': configKey}
-        
+
         # Design variables
-        row['β'] = data.get('beta', 'N/A')
-        row['θ (°)'] = data.get('theta', 'N/A')
-        
+        beta_val = data.get('beta', 'N/A')
+        theta_val = data.get('theta', 'N/A')
+        row['β'] = f"{beta_val:.4f}" if isinstance(beta_val, (int, float)) else beta_val
+        row['θ (°)'] = f"{theta_val:.0f}" if isinstance(theta_val, (int, float)) else theta_val
+
         # Plasticity results
         if 'plasticityCheck' in data:
             pc = data['plasticityCheck']
-            row['σ_max (MPa)'] = f"{pc.get('maxStress_MPa', 'N/A'):.2f}" if pc.get('maxStress_MPa') else 'N/A'
-            row['SF'] = f"{pc.get('safetyFactor', 'N/A'):.2f}" if pc.get('safetyFactor') and pc['safetyFactor'] != 'N/A' else 'N/A'
+            stress_val = pc.get('maxStress_MPa', 'N/A')
+            sf_val = pc.get('safetyFactor', 'N/A')
+            row['σ_max (MPa)'] = f"{stress_val:.2f}" if isinstance(stress_val, (int, float)) else stress_val
+            row['SF'] = f"{sf_val:.2f}" if isinstance(sf_val, (int, float)) and sf_val != 'N/A' else ('N/A' if sf_val == 'N/A' else f"{sf_val:.2f}")
             row['Plastic?'] = 'YES' if pc.get('hasPlasticity') else 'No'
         else:
             row['σ_max (MPa)'] = 'N/A'
             row['SF'] = 'N/A'
             row['Plastic?'] = 'N/A'
-        
+
         # Buckling results
         if 'bucklingCheck' in data:
             bc = data['bucklingCheck']
-            row['P_cr (kN)'] = f"{bc.get('criticalLoad_kN', 'N/A'):.2f}" if bc.get('criticalLoad_kN') and bc['criticalLoad_kN'] != 'N/A' else 'N/A'
-            row['LF'] = f"{bc.get('loadFactor', 'N/A'):.4f}" if bc.get('loadFactor') and bc['loadFactor'] != 'N/A' else 'N/A'
+            load_val = bc.get('criticalLoad_kN', 'N/A')
+            lf_val = bc.get('loadFactor', 'N/A')
+            row['P_cr (kN)'] = f"{load_val:.2f}" if isinstance(load_val, (int, float)) else load_val
+            row['LF'] = f"{lf_val:.4f}" if isinstance(lf_val, (int, float)) and lf_val != 'N/A' else ('N/A' if lf_val == 'N/A' else f"{lf_val:.4f}")
             row['Buckle?'] = 'YES' if bc.get('willBuckle') else 'No'
         else:
             row['P_cr (kN)'] = 'N/A'
             row['LF'] = 'N/A'
             row['Buckle?'] = 'N/A'
-        
+
         # Frequency results
         if 'frequency' in data and data['frequency'].get('naturalFrequencies'):
-            row['f₁ (Hz)'] = f"{data['frequency']['naturalFrequencies'][0]:.2f}"
+            freq_val = data['frequency']['naturalFrequencies'][0]
+            row['f₁ (Hz)'] = f"{freq_val:.2f}" if isinstance(freq_val, (int, float)) else 'N/A'
         else:
             row['f₁ (Hz)'] = 'N/A'
-        
+
         # Bandgap results
         if 'bandgaps' in data and len(data['bandgaps']) > 0:
             row['#BG'] = str(len(data['bandgaps']))
             bg1 = data['bandgaps'][0]
-            row['BG₁ Onset (Hz)'] = f"{bg1['onset']:.1f}"
-            row['BG₁ Width (Hz)'] = f"{bg1['width']:.1f}"
+            onset_val = bg1.get('onset', 'N/A')
+            width_val = bg1.get('width', 'N/A')
+            row['BG₁ Onset (Hz)'] = f"{onset_val:.1f}" if isinstance(onset_val, (int, float)) else onset_val
+            row['BG₁ Width (Hz)'] = f"{width_val:.1f}" if isinstance(width_val, (int, float)) else width_val
         else:
             row['#BG'] = '0'
             row['BG₁ Onset (Hz)'] = 'N/A'
             row['BG₁ Width (Hz)'] = 'N/A'
-        
+
         table.append(row)
-    
+
     return headers, table
 
 
@@ -158,7 +167,7 @@ def exportTableToCSV(headers, table, outputPath=None):
 # ============================================================
 def generatePlots(results):
     """Generate matplotlib plots for results visualization"""
-    
+
     try:
         import matplotlib.pyplot as plt
         import matplotlib
@@ -166,10 +175,10 @@ def generatePlots(results):
     except ImportError:
         print("Matplotlib not available. Skipping plot generation.")
         return []
-    
+
     outputFiles = []
     outputDir = os.path.dirname(__file__)
-    
+
     # Extract data for plotting
     betas = []
     thetas = []
@@ -178,33 +187,40 @@ def generatePlots(results):
     firstFreqs = []
     bandgapWidths = []
     bandgapOnsets = []
-    
+
     for configKey, data in results.items():
-        betas.append(data.get('beta', 0))
-        thetas.append(data.get('theta', 0))
-        
+        beta_val = data.get('beta', 0)
+        theta_val = data.get('theta', 0)
+        betas.append(beta_val if isinstance(beta_val, (int, float)) else 0)
+        thetas.append(theta_val if isinstance(theta_val, (int, float)) else 0)
+
         # Max stress
-        if 'plasticityCheck' in data and data['plasticityCheck'].get('maxStress_MPa'):
-            maxStresses.append(data['plasticityCheck']['maxStress_MPa'])
+        if 'plasticityCheck' in data:
+            stress_val = data['plasticityCheck'].get('maxStress_MPa')
+            maxStresses.append(stress_val if isinstance(stress_val, (int, float)) else None)
         else:
             maxStresses.append(None)
-        
+
         # Buckling LF
-        if 'bucklingCheck' in data and data['bucklingCheck'].get('loadFactor'):
-            bucklingLFs.append(data['bucklingCheck']['loadFactor'])
+        if 'bucklingCheck' in data:
+            lf_val = data['bucklingCheck'].get('loadFactor')
+            bucklingLFs.append(lf_val if isinstance(lf_val, (int, float)) else None)
         else:
             bucklingLFs.append(None)
-        
+
         # First natural frequency
         if 'frequency' in data and data['frequency'].get('naturalFrequencies'):
-            firstFreqs.append(data['frequency']['naturalFrequencies'][0])
+            freq_val = data['frequency']['naturalFrequencies'][0]
+            firstFreqs.append(freq_val if isinstance(freq_val, (int, float)) else None)
         else:
             firstFreqs.append(None)
-        
+
         # Bandgap info
         if 'bandgaps' in data and len(data['bandgaps']) > 0:
-            bandgapOnsets.append(data['bandgaps'][0]['onset'])
-            bandgapWidths.append(data['bandgaps'][0]['width'])
+            onset_val = data['bandgaps'][0].get('onset')
+            width_val = data['bandgaps'][0].get('width')
+            bandgapOnsets.append(onset_val if isinstance(onset_val, (int, float)) else None)
+            bandgapWidths.append(width_val if isinstance(width_val, (int, float)) else None)
         else:
             bandgapOnsets.append(None)
             bandgapWidths.append(None)

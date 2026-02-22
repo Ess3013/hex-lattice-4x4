@@ -240,7 +240,7 @@ mdb.models[modelName].StaticStep(name=stepName_Static, previous='Initial',
 # Step 2: Buckling Analysis (linear perturbation)
 stepName_Buckling = 'Step-Buckling'
 mdb.models[modelName].BuckleStep(name=stepName_Buckling, previous=stepName_Static,
-                                  numEigenvalues=10, maxLanczos=20)
+                                  eigenvalue=10.0)
 
 # Step 3: Frequency Extraction (for vibration analysis)
 stepName_Freq = 'Step-Frequency'

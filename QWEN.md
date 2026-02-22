@@ -141,3 +141,6 @@ git clone https://github.com/Ess3013/hex-lattice-4x4.git
 To regenerate the model from scratch:
 1. Delete `HexLattice_4x4.cae` and `HexLattice_4x4.jnl`
 2. Re-run `hex_lattice_4x4.py`
+
+## Qwen Added Memories
+- always push your changes to github

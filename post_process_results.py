@@ -163,23 +163,27 @@ def extractResultsFromOdb(odbPath):
 def identifyBandgaps(frequencies, strainEnergy, threshold_factor=0.1):
     """
     Identify bandgaps from the FRF (strain energy vs frequency).
-    
+
     A bandgap is a frequency range where vibration transmission is significantly
     attenuated (low strain energy indicates vibration absorption).
-    
+
     Args:
         frequencies: List of frequencies (Hz)
         strainEnergy: List of strain energy values
         threshold_factor: Fraction of max SE to use as threshold
-        
+
     Returns:
         List of bandgap dictionaries with onset, width, and center frequency
     """
     if not frequencies or not strainEnergy:
         return []
-    
-    import numpy as np
-    
+
+    try:
+        import numpy as np
+    except ImportError:
+        # Fallback without numpy
+        return identifyBandgapsPurePython(frequencies, strainEnergy, threshold_factor)
+
     freq_arr = np.array(frequencies)
     se_arr = np.array(strainEnergy)
     
@@ -227,6 +231,50 @@ def identifyBandgaps(frequencies, strainEnergy, threshold_factor=0.1):
             'center': float((bandgap_start + bandgap_end) / 2)
         })
     
+    return bandgaps
+
+
+def identifyBandgapsPurePython(frequencies, strainEnergy, threshold_factor=0.1):
+    """
+    Pure Python fallback for bandgap identification (no numpy required).
+    """
+    if not frequencies or not strainEnergy:
+        return []
+
+    se_max = max(strainEnergy)
+    if se_max == 0:
+        return []
+
+    se_normalized = [s / se_max for s in strainEnergy]
+    threshold = threshold_factor
+
+    bandgaps = []
+    in_bandgap = False
+    bandgap_start = None
+
+    for i, is_below in enumerate([s < threshold for s in se_normalized]):
+        if is_below and not in_bandgap:
+            in_bandgap = True
+            bandgap_start = frequencies[i]
+        elif not is_below and in_bandgap:
+            in_bandgap = False
+            bandgap_end = frequencies[i]
+            bandgaps.append({
+                'onset': bandgap_start,
+                'end': bandgap_end,
+                'width': bandgap_end - bandgap_start,
+                'center': (bandgap_start + bandgap_end) / 2
+            })
+
+    if in_bandgap:
+        bandgap_end = frequencies[-1]
+        bandgaps.append({
+            'onset': bandgap_start,
+            'end': bandgap_end,
+            'width': bandgap_end - bandgap_start,
+            'center': (bandgap_start + bandgap_end) / 2
+        })
+
     return bandgaps
 
 
