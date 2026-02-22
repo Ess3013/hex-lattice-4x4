@@ -341,7 +341,7 @@ def processAllResults(resultsDir=None):
         Dictionary with all processed results
     """
     if resultsDir is None:
-        resultsDir = os.path.dirname(__file__)
+        resultsDir = os.getcwd()
     
     # Find all ODB files
     odbFiles = [f for f in os.listdir(resultsDir) if f.endswith('.odb')]
@@ -409,9 +409,9 @@ def exportResultsToCSV(allResults, outputPath=None):
         outputPath: Output CSV file path
     """
     import csv
-    
+
     if outputPath is None:
-        outputPath = os.path.join(os.path.dirname(__file__), 'results_summary.csv')
+        outputPath = os.path.join(os.getcwd(), 'results_summary.csv')
     
     # Prepare rows
     rows = []
@@ -509,9 +509,9 @@ if __name__ == '__main__':
         
         # Export to CSV
         exportResultsToCSV(allResults)
-        
+
         # Save to JSON
-        jsonPath = os.path.join(os.path.dirname(__file__), 'processed_results.json')
+        jsonPath = os.path.join(os.getcwd(), 'processed_results.json')
         
         # Convert for JSON serialization
         jsonResults = {}

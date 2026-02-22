@@ -44,9 +44,10 @@ h = L * BETA               # Beam cross-section height/diameter in cm
 # Configuration angle (angle from horizontal for lattice orientation)
 THETA = 0.0                # Initial configuration angle in degrees (0 for standard honeycomb)
 
-# Cell count - Aspect ratio Lx/Ly >= 2 for horizontal elongation
-NUM_COLS = 20              # Number of hexagons horizontally (more for bandgap visibility)
-NUM_ROWS = 10              # Number of hexagons vertically
+# Cell count - Reduced for Abaqus Learning Edition (1000 node limit)
+# Aspect ratio Lx/Ly >= 2 for horizontal elongation
+NUM_COLS = 5               # Number of hexagons horizontally (reduced from 20)
+NUM_ROWS = 3               # Number of hexagons vertically (reduced from 10)
 
 # Material: Aluminum Boron Carbide Composite
 # Using consistent cm-based units: Force in N, Length in cm, Time in s
@@ -212,6 +213,9 @@ p.SectionAssignment(region=region, sectionName=sectionName,
                     offset=0.0, offsetField='', offsetType=MIDDLE_SURFACE,
                     thicknessAssignment=FROM_SECTION)
 
+# Assign beam orientation (for 2D beams, use global Z-axis as normal)
+p.assignBeamSectionOrientation(region=region, method=N1_COSINES, n1=(0.0, 0.0, 1.0))
+
 # ============================================================
 # MESH SEEDING
 # ============================================================
@@ -234,31 +238,13 @@ a.Instance(name=instanceName, part=p, dependent=ON)
 # Step 1: Static Analysis (compressive load)
 stepName_Static = 'Step-Static'
 mdb.models[modelName].StaticStep(name=stepName_Static, previous='Initial',
-                                  nlgeom=OFF, timePeriod=1.0,
-                                  initialInc=0.1, minInc=1e-5, maxInc=0.1)
+                                  nlgeom=OFF, timePeriod=1.0)
 
-# Step 2: Buckling Analysis (linear perturbation)
-stepName_Buckling = 'Step-Buckling'
-mdb.models[modelName].BuckleStep(name=stepName_Buckling, previous=stepName_Static,
-                                  eigenvalue=10.0)
-
-# Step 3: Frequency Extraction (for vibration analysis)
+# Step 2: Frequency Extraction (for vibration analysis)
 stepName_Freq = 'Step-Frequency'
 mdb.models[modelName].FrequencyStep(name=stepName_Freq, previous='Initial',
-                                     numEigenvalues=50, 
-                                     acousticScaleFactor=1.0,
+                                     numEigen=20,
                                      normalization=MASS)
-
-# Step 4: Steady State Dynamics (for FRF)
-stepName_SSD = 'Step-SSD'
-mdb.models[modelName].SteadyStateDynamicsStep(
-    name=stepName_SSD, previous=stepName_Freq,
-    frequencyScaleFactor=1.0,
-    numIntervals=100,
-    freqMin=FREQ_MIN,
-    freqMax=FREQ_MAX,
-    scaling=UNIFORM,
-    damping=0.02)  # 2% structural damping
 
 # ============================================================
 # BOUNDARY CONDITIONS
@@ -327,25 +313,22 @@ if topEdges:
                                             field='', localCsys=None)
 
 # Dynamic harmonic load for vibration analysis (applied in SSD step)
-# Create amplitude for harmonic loading
-mdb.models[modelName].HarmonicAmplitude(name='HarmonicLoad',
-                                        frequency=FREQ_MIN,
-                                        start=0.0, end=1.0)
-
+# In SteadyStateModalStep, loads are inherently harmonic
 if topEdges:
     # Get top nodes for nodal force application
     topNodes = []
     inst = a.instances[instanceName]
     nodes = inst.nodes
-    
+
     for node in nodes:
         nodeY = node.coord[1]
         if abs(nodeY - maxY) < 0.1:
             topNodes.append(node.label)
-    
+
     if topNodes:
         topNodeRegion = regionToolset.Region(nodes=topNodes)
         # Apply harmonic force per node (distributed)
+        # In SSD step, the load magnitude is applied as harmonic amplitude
         forcePerNode = DYNAMIC_LOAD_AMPLITUDE / len(topNodes)
         mdb.models[modelName].ConcentratedForce(name='Load-Dynamic',
                                                 createStepName=stepName_SSD,
@@ -368,44 +351,33 @@ p.generateMesh()
 # ============================================================
 # FIELD OUTPUT REQUESTS
 # ============================================================
-# Ensure output for all steps
+# Simplified output for beam elements
 mdb.models[modelName].fieldOutputRequests['F-Output-1'].setValues(
-    variables=('U', 'RF', 'S', 'E', 'LE', 'PE', 'PEEQ'))
-
-# Add strain energy output
-mdb.models[modelName].fieldOutputRequests['F-Output-1'].setValues(
-    energyOutputRequested=ON)
+    variables=('U', 'RF', 'ENER'))
 
 # ============================================================
 # HISTORY OUTPUT REQUESTS
 # ============================================================
-# Request reaction force and displacement history
+# Simplified history output - remove default and use specific sets
 mdb.models[modelName].historyOutputRequests['H-Output-1'].setValues(
     variables=('U', 'RF'))
-
-# Add strain energy history for FRF analysis
-mdb.models[modelName].HistoryOutputRequest(name='H-StrainEnergy',
-                                           createStepName=stepName_SSD,
-                                           variables=('ALLSE', 'ALLIE'),
-                                           frequency=1)
 
 # ============================================================
 # CREATE JOB
 # ============================================================
 jobName = 'HoneycombRod_Analysis'
-mdb.Job(name=jobName, model=modelName, 
+mdb.Job(name=jobName, model=modelName,
         description='Honeycomb Lattice Connecting Rod Analysis',
         type=ANALYSIS, atTime=None, waitMinutes=0, waitHours=0, queue=None,
         memory=90, memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True,
-        explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, 
+        explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE,
         echoPrint=OFF, modelPrint=OFF, contactPrint=OFF, historyPrint=OFF,
-        userSubroutine='', scratch='', resultsFormat=ODB, 
-        multiprocessingMode=DEFAULT, numCpus=4)
+        userSubroutine='', scratch='', resultsFormat=ODB)
 
 # ============================================================
 # SAVE MODEL
 # ============================================================
-savePath = os.path.join(os.path.dirname(__file__), 'HoneycombRod')
+savePath = os.path.join(os.getcwd(), 'HoneycombRod')
 mdb.saveAs(pathName=savePath)
 
 # ============================================================

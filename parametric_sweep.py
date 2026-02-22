@@ -26,22 +26,21 @@ import mesh
 import job
 import sketch
 import regionToolset
-import mdb
 
 # ============================================================
 # SWEEP PARAMETERS
 # ============================================================
 
-# Slenderness ratio sweep: 1/20 <= beta <= 1/5
-BETA_VALUES = [1.0/20, 1.0/15, 1.0/12, 1.0/10, 1.0/8, 1.0/6, 1.0/5]
+# Slenderness ratio sweep: 1/20 <= beta <= 1/5 (reduced for testing)
+BETA_VALUES = [1.0/15, 1.0/10, 1.0/8, 1.0/5]
 
-# Configuration angle sweep: 10° <= theta <= 30°
-THETA_VALUES = [0, 10, 15, 20, 25, 30]  # Include 0 as baseline
+# Configuration angle sweep: 0° <= theta <= 30° (reduced for testing)
+THETA_VALUES = [0, 15, 30]
 
-# Fixed parameters
+# Fixed parameters - Reduced for Abaqus Learning Edition (1000 node limit)
 L = 0.3                    # Beam length in cm
-NUM_COLS = 20              # Number of cells horizontally
-NUM_ROWS = 10              # Number of cells vertically
+NUM_COLS = 5               # Number of cells horizontally (reduced from 20)
+NUM_ROWS = 3               # Number of cells vertically (reduced from 10)
 YOUNGS_MODULUS = 70e5      # N/cm²
 POISSONS_RATIO = 0.33
 DENSITY = 2.7e-6           # kg/cm³
@@ -53,7 +52,7 @@ FREQ_MAX = 1000.0          # Hz
 ELEM_PER_BEAM = 3          # Elements per beam
 
 # Results storage
-resultsFile = os.path.join(os.path.dirname(__file__), 'parametric_results.json')
+resultsFile = os.path.join(os.getcwd(), 'parametric_results.json')
 allResults = {}
 
 # ============================================================
@@ -166,14 +165,17 @@ def createModel(beta, theta):
     
     # Create wire geometry
     p.BaseWire(sketch=s)
-    
+
     # Assign section
     allEdges = p.edges
     region = regionToolset.Region(edges=allEdges)
     p.SectionAssignment(region=region, sectionName=sectionName,
                         offset=0.0, offsetField='', offsetType=MIDDLE_SURFACE,
                         thicknessAssignment=FROM_SECTION)
-    
+
+    # Assign beam orientation (for 2D beams, use global Z-axis as normal)
+    p.assignBeamSectionOrientation(region=region, method=N1_COSINES, n1=(0.0, 0.0, 1.0))
+
     # Seed edges
     elemSize = L / ELEM_PER_BEAM
     p.seedEdgeBySize(edges=allEdges, size=elemSize, constraint=FINER)
@@ -188,21 +190,10 @@ def createModel(beta, theta):
     stepName_Static = 'Step-Static'
     mdb.models[modelName].StaticStep(name=stepName_Static, previous='Initial',
                                       nlgeom=OFF, timePeriod=1.0)
-    
-    stepName_Buckling = 'Step-Buckling'
-    mdb.models[modelName].BuckleStep(name=stepName_Buckling, previous=stepName_Static,
-                                      numEigenvalues=10)
-    
+
     stepName_Freq = 'Step-Frequency'
     mdb.models[modelName].FrequencyStep(name=stepName_Freq, previous='Initial',
-                                         numEigenvalues=50, normalization=MASS)
-    
-    stepName_SSD = 'Step-SSD'
-    mdb.models[modelName].SteadyStateDynamicsStep(
-        name=stepName_SSD, previous=stepName_Freq,
-        frequencyScaleFactor=1.0, numIntervals=100,
-        freqMin=FREQ_MIN, freqMax=FREQ_MAX,
-        scaling=UNIFORM, damping=0.02)
+                                         numEigen=20, normalization=MASS)
     
     # Boundary conditions
     instance = a.instances[instanceName]
@@ -244,23 +235,16 @@ def createModel(beta, theta):
     elemType = mesh.ElemType(elemCode=B21, elemLibrary=STANDARD)
     p.setElementType(regions=region, elemTypes=(elemType,))
     p.generateMesh()
-    
-    # Field output
+
+    # Field output - simplified for beam elements
     mdb.models[modelName].fieldOutputRequests['F-Output-1'].setValues(
-        variables=('U', 'RF', 'S', 'E', 'LE', 'PE', 'PEEQ'),
-        energyOutputRequested=ON)
-    
-    # History output
-    mdb.models[modelName].HistoryOutputRequest(name='H-StrainEnergy',
-                                               createStepName=stepName_SSD,
-                                               variables=('ALLSE', 'ALLIE'),
-                                               frequency=1)
-    
+        variables=('U', 'RF', 'ENER'))
+
     # Create job
     jobName = f'Job_b{betaStr}_t{thetaStr}'
     mdb.Job(name=jobName, model=modelName,
             description=f'beta={beta:.4f}, theta={theta}°',
-            type=ANALYSIS, numCpus=4, memory=90, memoryUnits=PERCENTAGE)
+            type=ANALYSIS, memory=90, memoryUnits=PERCENTAGE)
     
     return modelName, jobName, beta, theta, h
 
@@ -270,7 +254,6 @@ def createModel(beta, theta):
 def extractResults(odbPath, beta, theta):
     """Extract results from ODB file"""
     import visualization
-    import xyPlot
     from odbAccess import openOdb
     
     results = {
@@ -286,58 +269,32 @@ def extractResults(odbPath, beta, theta):
     }
     
     try:
+        print(f"  Opening ODB: {odbPath}")
         odb = openOdb(odbPath)
-        
+        print(f"  ODB opened successfully")
+
         # Static step results
         if 'Step-Static' in odb.steps:
             step = odb.steps['Step-Static']
-            if 'S' in step.frames[-1].fieldOutputs:
-                stress = step.frames[-1].fieldOutputs['S']
-                maxStress = max(v.mises for v in stress.values)
-                results['maxStress'] = maxStress
-            
             if 'U' in step.frames[-1].fieldOutputs:
                 disp = step.frames[-1].fieldOutputs['U']
                 maxDisp = max(v.magnitude for v in disp.values)
                 results['maxDisplacement'] = maxDisp
-        
-        # Buckling step results
-        if 'Step-Buckling' in odb.steps:
-            step = odb.steps['Step-Buckling']
-            for frame in step.frames:
-                if frame.description:
-                    try:
-                        lf = frame.frameValue  # Load factor
-                        results['bucklingLoadFactors'].append(lf)
-                    except:
-                        pass
-        
+
         # Frequency step results
         if 'Step-Frequency' in odb.steps:
             step = odb.steps['Step-Frequency']
-            for frame in step.frames:
+            for i in range(len(step.frames)):
+                frame = step.frames[i]
                 freq = frame.frameValue  # Frequency in Hz
                 results['naturalFrequencies'].append(freq)
-        
-        # SSD step - Strain energy vs frequency
-        if 'Step-SSD' in odb.steps:
-            step = odb.steps['Step-SSD']
-            if 'H-StrainEnergy' in step.historyRegions:
-                histRegion = step.historyRegions['H-StrainEnergy']
-                if 'ALLSE' in histRegion.historyOutputs:
-                    data = histRegion.historyOutputs['ALLSE'].data
-                    for time, energy in data:
-                        # Time in SSD is actually frequency
-                        freq = time
-                        results['frequencies'].append(freq)
-                        results['strainEnergyFRF'].append(energy)
-        
+
         odb.close()
-        
+
     except Exception as e:
         print(f"Error extracting results from {odbPath}: {str(e)}")
         results['error'] = str(e)
-    
+
     return results
 
 # ============================================================
@@ -358,43 +315,80 @@ def runSweep():
     totalConfigs = len(BETA_VALUES) * len(THETA_VALUES)
     configNum = 0
     
+    # Debug: write start of sweep
+    with open('sweep_debug.txt', 'w') as f:
+        f.write(f"Starting sweep: {len(BETA_VALUES)} betas x {len(THETA_VALUES)} thetas = {totalConfigs} configs\n")
+
     for beta in BETA_VALUES:
         for theta in THETA_VALUES:
             configNum += 1
             betaStr = f"{beta:.4f}".replace('.', '_')
             thetaStr = f"{theta:.0f}"
             
+            with open('sweep_debug.txt', 'a') as f:
+                f.write(f"\n[{configNum}/{totalConfigs}] Processing: beta={beta:.4f}, theta={theta}°\n")
+
             print(f"\n[{configNum}/{totalConfigs}] Processing: beta={beta:.4f}, theta={theta}°")
             print("-" * 50)
-            
+
             # Create model
             try:
                 modelName, jobName, beta, theta, h = createModel(beta, theta)
-                print(f"  Model created: {modelName}")
+                with open('sweep_debug.txt', 'a') as f:
+                    f.write(f"  Model created: {modelName}\n")
                 print(f"  Beam height: {h:.4f} cm")
-                
+
                 # Save model
-                savePath = os.path.join(os.path.dirname(__file__), modelName)
+                savePath = os.path.join(os.getcwd(), modelName)
                 mdb.saveAs(pathName=savePath)
+                with open('sweep_debug.txt', 'a') as f:
+                    f.write(f"  Model saved: {savePath}.cae\n")
                 print(f"  Model saved: {savePath}.cae")
-                
+
                 # Submit job
+                with open('sweep_debug.txt', 'a') as f:
+                    f.write(f"  Submitting job: {jobName}...\n")
+                    f.write(f"  Jobs in mdb: {list(mdb.jobs.keys())}\n")
                 print(f"  Submitting job: {jobName}...")
+                
+                # Check if job exists
+                if jobName not in mdb.jobs:
+                    with open('sweep_debug.txt', 'a') as f:
+                        f.write(f"  ERROR: Job {jobName} not found in mdb.jobs\n")
+                    raise Exception(f"Job {jobName} not found")
+                
+                # Submit and wait for completion
                 mdb.jobs[jobName].submit()
-                mdb.jobs[jobName].waitForCompletion()
+                
+                # Wait for completion with polling
+                import time
+                maxWait = 300  # 5 minutes max per job
+                waitTime = 0
+                while waitTime < maxWait:
+                    time.sleep(2)
+                    jobStatus = mdb.jobs[jobName].status
+                    with open('sweep_debug.txt', 'a') as f:
+                        f.write(f"    Waiting... status: {jobStatus}\n")
+                    if jobStatus == COMPLETED or jobStatus == 'ABORTED' or jobStatus == 'FAILED':
+                        break
+                    waitTime += 2
                 
                 # Check job status
                 jobStatus = mdb.jobs[jobName].status
-                print(f"  Job status: {jobStatus}")
-                
+                with open('sweep_debug.txt', 'a') as f:
+                    f.write(f"  Final job status: {jobStatus}\n")
+                print(f"  Final job status: {jobStatus}")
+
                 if jobStatus == COMPLETED:
                     # Extract results
-                    odbPath = os.path.join(os.path.dirname(__file__), f'{jobName}.odb')
+                    odbPath = os.path.join(os.getcwd(), f'{jobName}.odb')
+                    print(f"  Extracting results from {odbPath}")
                     results = extractResults(odbPath, beta, theta)
+                    print(f"  Results: {results}")
 
                     configKey = f"b{betaStr}_t{thetaStr}"
                     allResults[configKey] = results
-                    print(f"  Results extracted successfully")
+                    print(f"  Results stored for {configKey}")
 
                     if results['maxStress']:
                         print(f"  Max Stress: {results['maxStress']/1e3:.2f} MPa")
@@ -406,6 +400,8 @@ def runSweep():
                     print(f"  Job did not complete successfully")
 
             except Exception as e:
+                with open('sweep_debug.txt', 'a') as f:
+                    f.write(f"  ERROR: {str(e)}\n")
                 print(f"  ERROR: {str(e)}")
                 configKey = f"b{betaStr}_t{thetaStr}"
                 allResults[configKey] = {
@@ -426,7 +422,9 @@ def runSweep():
                 except:
                     pass
     
-    # Save all results to JSON
+    # Save all results to JSON after each iteration (for debugging)
+    print(f"\n  Debug: allResults has {len(allResults)} entries")
+    
     # Convert tuples to lists for JSON serialization
     jsonResults = {}
     for key, value in allResults.items():
@@ -436,9 +434,17 @@ def runSweep():
                 jsonResults[key][k] = list(v)
             else:
                 jsonResults[key][k] = v
-    
+
+    print(f"  Debug: jsonResults has {len(jsonResults)} entries")
     with open(resultsFile, 'w') as f:
         json.dump(jsonResults, f, indent=2)
+    print(f"  Debug: Results written to {resultsFile}")
+    
+    # Also write a simple text summary
+    with open('sweep_summary.txt', 'w') as f:
+        f.write(f"Total configurations: {len(allResults)}\n")
+        for key, value in allResults.items():
+            f.write(f"{key}: {value}\n")
     
     print("\n" + "=" * 70)
     print("PARAMETRIC SWEEP COMPLETED")

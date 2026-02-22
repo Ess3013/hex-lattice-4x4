@@ -20,13 +20,13 @@ import math
 # ============================================================
 def loadResults(resultsFile=None):
     """Load processed results from JSON file"""
-    
+
     if resultsFile is None:
-        resultsFile = os.path.join(os.path.dirname(__file__), 'processed_results.json')
-    
+        resultsFile = os.path.join(os.getcwd(), 'processed_results.json')
+
     if not os.path.exists(resultsFile):
         # Try alternative file
-        altFile = os.path.join(os.path.dirname(__file__), 'parametric_results.json')
+        altFile = os.path.join(os.getcwd(), 'parametric_results.json')
         if os.path.exists(altFile):
             resultsFile = altFile
         else:
@@ -149,9 +149,9 @@ def exportTableToCSV(headers, table, outputPath=None):
     """Export table to CSV file"""
     
     import csv
-    
+
     if outputPath is None:
-        outputPath = os.path.join(os.path.dirname(__file__), 'results_table.csv')
+        outputPath = os.path.join(os.getcwd(), 'results_table.csv')
     
     with open(outputPath, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=headers)
@@ -177,7 +177,7 @@ def generatePlots(results):
         return []
 
     outputFiles = []
-    outputDir = os.path.dirname(__file__)
+    outputDir = os.getcwd()
 
     # Extract data for plotting
     betas = []
@@ -452,9 +452,9 @@ def findOptimalConfiguration(results):
 
 def generateOptimizationReport(candidates, outputPath=None):
     """Generate optimization recommendation report"""
-    
+
     if outputPath is None:
-        outputPath = os.path.join(os.path.dirname(__file__), 'optimization_report.txt')
+        outputPath = os.path.join(os.getcwd(), 'optimization_report.txt')
     
     with open(outputPath, 'w') as f:
         f.write("=" * 80 + "\n")
