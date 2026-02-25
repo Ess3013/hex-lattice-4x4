@@ -1,0 +1,6 @@
+Abaqus Lattice Simulation Results
+=================================
+
+Maximum Von Mises Stress: 2.997089e+09 Pa
+Element ID: 30
+Approx. Location (X, Y): (0.005000, 9.995000)

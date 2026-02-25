@@ -1,0 +1,21 @@
+Reference Model Data
+====================
+
+Part Bounding Box:
+X: [-0.005000, 0.075000]
+Y: [9.990000, 10.030000]
+
+--- SET-1 (Node Set) ---
+Count: 16
+X Range: [-0.002500, 0.072500]
+Y Range: [9.990000, 9.990000]
+
+--- SET-1 (Element Set) ---
+X Range: [-0.002500, 0.072500]
+Y Range: [9.990000, 9.990000]
+
+--- SET-2 (Node Set) ---
+Count: 16
+X Range: [-0.002500, 0.072500]
+Y Range: [10.030000, 10.030000]
+

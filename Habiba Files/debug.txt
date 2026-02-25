@@ -1,0 +1,3 @@
+Total Nodes in Assembly: 116
+Found 16 support nodes at Y=9.99
+Found 16 load nodes at Y=10.03
